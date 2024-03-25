@@ -10,7 +10,7 @@ This repository offers a suite of components designed to integrate the [Google G
 
 Once Xircuits is installed, simply run
 
-bash```
+```bash
 xircuits install google_gemini
 ```
 
