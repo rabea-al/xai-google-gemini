@@ -11,4 +11,4 @@ keywords = ["xircuits", "generative ai", "google", "gemini"]
 # Xircuits-specific configurations
 [tool.xircuits]
 requirements_path = "requirements.txt"
-default_example_path = "gemini_example.xircuits"
+default_example_path = "examples/gemini_example.xircuits"
