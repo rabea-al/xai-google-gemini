@@ -1,31 +1,28 @@
 from xai_components.base import InArg, OutArg, Component, xai_component, secret
 import os
-import google.generativeai as genai
-import PIL.Image
+from google import genai
 
 
 @xai_component
 class GeminiAuthorize(Component):
-    """A Xircuits component to authorize the Google Generative AI library.
+    """A Xircuits component to authorize the Google GenAI library.
 
     ##### inPorts:
     - api_key: The API key for authorization.
     - from_env: Flag to indicate if API key should be fetched from environment.
-
     """
     api_key: InArg[secret]
     from_env: InArg[bool]
 
     def execute(self, ctx) -> None:
-        if self.from_env.value:
-            genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-        else:
-            genai.configure(api_key=self.api_key.value)
+        key = os.getenv('GOOGLE_API_KEY') if self.from_env.value else self.api_key.value
+        ctx["genai_client"] = genai.Client(api_key=key)
+
 
 
 @xai_component
 class GeminiGenerateContent(Component):
-    """A Xircuits component to generate content using the Google Generative AI library.
+    """A Xircuits component to generate content using the Google GenAI library.
 
     ##### inPorts:
     - model_name: The name of the generative model to use.
@@ -40,14 +37,21 @@ class GeminiGenerateContent(Component):
     output: OutArg[str]
 
     def execute(self, ctx) -> None:
-        model = genai.GenerativeModel(self.model_name.value if self.model_name.value is not None else 'gemini-pro')
-        response = model.generate_content(self.input_data.value, stream=False)
+        client = ctx.get("genai_client")
+        if not client:
+            raise ValueError("Missing genai_client. Please make sure GeminiAuthorize was executed first.")
+
+        model = self.model_name.value or "models/gemini-1.5-flash"
+        response = client.models.generate_content(
+            model=model,
+            contents=[self.input_data.value]
+        )
         self.output.value = response.text
 
 
 @xai_component
 class GeminiGenerateContentStream(Component):
-    """A Xircuits component to generate content using the Google Generative AI library with streaming.
+    """A Xircuits component to generate content using the Google GenAI library with streaming.
 
     ##### inPorts:
     - model_name: The name of the generative model to use.
@@ -62,14 +66,21 @@ class GeminiGenerateContentStream(Component):
     output: OutArg[any]
 
     def execute(self, ctx) -> None:
-        model = genai.GenerativeModel(self.model_name.value if self.model_name.value is not None else 'gemini-pro')
-        response = model.generate_content(self.input_data.value, stream=True)
-        self.output.value = (chunk.text for chunk in response)
+        client = ctx.get("genai_client")
+        if not client:
+            raise ValueError("Missing genai_client. Please make sure GeminiAuthorize was executed first.")
+
+        model = self.model_name.value or "models/gemini-1.5-flash"
+        stream = client.models.generate_content_stream(
+            model=model,
+            contents=[self.input_data.value]
+        )
+        self.output.value = (chunk.text for chunk in stream)
 
 
 @xai_component
 class GeminiStartChat(Component):
-    """A Xircuits component to start a chat using the Google Generative AI library.
+    """A Xircuits component to start a chat using the Google GenAI library.
 
     ##### inPorts:
     - model_name: The name of the generative model to use.
@@ -81,17 +92,24 @@ class GeminiStartChat(Component):
     model_name: InArg[str]
     history: InArg[list]
 
-    chat: OutArg[genai.ChatSession]
+    chat: OutArg[any]
 
     def execute(self, ctx) -> None:
-        model = genai.GenerativeModel(self.model_name.value if self.model_name.value is not None else 'gemini-pro')
-        chat = model.start_chat(history=self.history.value)
+        client = ctx.get("genai_client")
+        if not client:
+            raise ValueError("Missing genai_client. Please make sure GeminiAuthorize was executed first.")
+
+        model = self.model_name.value or "models/gemini-1.5-flash"
+        chat = client.chats.create(
+            model=model,
+            history=self.history.value
+        )
         self.chat.value = chat
 
 
 @xai_component
 class GeminiChatSendMessage(Component):
-    """A Xircuits component to send a message in a chat using the Google Generative AI library.
+    """A Xircuits component to send a message in a chat using the Google GenAI library.
 
     ##### inPorts:
     - chat: The chat session object.
@@ -100,40 +118,40 @@ class GeminiChatSendMessage(Component):
     ##### outPorts:
     - response: The response to the message.
     """
-    chat: InArg[genai.ChatSession]
+    chat: InArg[any]
     message: InArg[str]
 
     response: OutArg[str]
 
     def execute(self, ctx) -> None:
-        response = self.chat.value.send_message(self.message.value, stream=False)
-        self.output_response.value = response.text
+        response = self.chat.value.send_message(message=self.message.value)
+        self.response.value = response.text
 
 
 @xai_component
 class GeminiChatSendMessageStream(Component):
-    """A Xircuits component to send a message in a chat using the Google Generative AI library with streaming.
+    """A Xircuits component to send a message in a chat using the Google GenAI library with streaming.
 
     ##### inPorts:
     - chat: The chat session object.
     - message: The message to send.
 
     ##### outPorts:
-    - output_response: The response to the message stream.
+    - response: The response to the message stream.
     """
-    chat: InArg[genai.ChatSession]
+    chat: InArg[any]
     message: InArg[str]
 
-    output_response: OutArg[any]
+    response: OutArg[any]
 
     def execute(self, ctx) -> None:
-        response = self.chat.value.send_message(self.message.value, stream=True)
-        self.output_response.value = (chunk.text for chunk in response)
+        stream = self.chat.value.send_message_stream(message=self.message.value)
+        self.response.value = (chunk.text for chunk in stream)
 
 
 @xai_component
 class GeminiCountTokens(Component):
-    """A Xircuits component to count tokens using the Google Generative AI library.
+    """A Xircuits component to count tokens using the Google GenAI library.
 
     ##### inPorts:
     - model_name: The name of the generative model to use.
@@ -148,5 +166,13 @@ class GeminiCountTokens(Component):
     output_tokens: OutArg[int]
 
     def execute(self, ctx) -> None:
-        model = genai.GenerativeModel(self.model_name.value)
-        self.output_tokens.value = model.count_tokens(self.input_data.value)
+        client = ctx.get("genai_client")
+        if not client:
+            raise ValueError("Missing genai_client. Please make sure GeminiAuthorize was executed first.")
+
+        model = self.model_name.value or "models/gemini-1.5-flash"
+        result = client.models.count_tokens(
+            model=model,
+            contents=[self.input_data.value]
+        )
+        self.output_tokens.value = result.total_tokens
